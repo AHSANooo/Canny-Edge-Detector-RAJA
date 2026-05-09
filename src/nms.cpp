@@ -1,50 +1,223 @@
 #include "nms.hpp"
-#include <cmath>
+#define VERBOSE 0
+#define NOEDGE 255
+#define POSSIBLE_EDGE 128
+#define EDGE 0
 
-std::vector<float> applyNonMaximumSuppression(const std::vector<float>& mag, const std::vector<float>& dir, int width, int height) {
-    int num_pixels = width * height;
-    std::vector<float> output_nms(num_pixels, 0.0f);
+/*******************************************************************************
+* PROCEDURE: non_max_supp
+* PURPOSE: This routine applies non-maximal suppression to the magnitude of
+* the gradient image.
+* NAME: Mike Heath
+* DATE: 2/15/96
+*******************************************************************************/
+void non_max_supp(short *mag, short *gradx, short *grady, int nrows, int ncols,
+    unsigned char *result)
+{
+    printf("\n===================== Non_Max_Supp =====================\n" );
+    clock_t ini_non_max_supp = clock();
+    int rowcount, colcount,count;
+    short *magrowptr,*magptr;
+    short *gxrowptr,*gxptr;
+    short *gyrowptr,*gyptr,z1,z2;
+    short m00,gx,gy;
+    float mag1,mag2,xperp,yperp;
+    unsigned char *resultrowptr, *resultptr;
 
-    for (int y = 1; y < height - 1; ++y) {
-        for (int x = 1; x < width - 1; ++x) {
-            float angle = dir[y * width + x];
-            
-            // Normalize angle to [0, 180)
-            if (angle < 0.0f) {
-                angle += 180.0f;
+
+   /****************************************************************************
+   * Zero the edges of the result image.
+   ****************************************************************************/
+    for(count=0,resultrowptr=result,resultptr=result+ncols*(nrows-1);
+        count<ncols; resultptr++,resultrowptr++,count++){
+        *resultrowptr = *resultptr = (unsigned char) 0;
+    }
+
+    for(count=0,resultptr=result,resultrowptr=result+ncols-1;
+        count<nrows; count++,resultptr+=ncols,resultrowptr+=ncols){
+        *resultptr = *resultrowptr = (unsigned char) 0;
+    }
+
+   /****************************************************************************
+   * Suppress non-maximum points.
+   ****************************************************************************/
+   clock_t ini_non_max,fin_non_max;
+   ini_non_max = clock();
+   for(rowcount=1,magrowptr=mag+ncols+1,gxrowptr=gradx+ncols+1,
+      gyrowptr=grady+ncols+1,resultrowptr=result+ncols+1;
+      rowcount<nrows-2;
+      rowcount++,magrowptr+=ncols,gyrowptr+=ncols,gxrowptr+=ncols,
+      resultrowptr+=ncols){
+      for(colcount=1,magptr=magrowptr,gxptr=gxrowptr,gyptr=gyrowptr,
+         resultptr=resultrowptr;colcount<ncols-2;
+         colcount++,magptr++,gxptr++,gyptr++,resultptr++){
+         m00 = *magptr;
+         if(m00 == 0){
+            *resultptr = (unsigned char) NOEDGE;
+         }
+         else{
+            xperp = -(gx = *gxptr)/((float)m00);
+            yperp = (gy = *gyptr)/((float)m00);
+         }
+
+         if(gx >= 0){
+            if(gy >= 0){
+                    if (gx >= gy)
+                    {
+                        /* 111 */
+                        /* Left point */
+                        z1 = *(magptr - 1);
+                        z2 = *(magptr - ncols - 1);
+
+                        mag1 = (m00 - z1)*xperp + (z2 - z1)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr + 1);
+                        z2 = *(magptr + ncols + 1);
+
+                        mag2 = (m00 - z1)*xperp + (z2 - z1)*yperp;
+                    }
+                    else
+                    {
+                        /* 110 */
+                        /* Left point */
+                        z1 = *(magptr - ncols);
+                        z2 = *(magptr - ncols - 1);
+
+                        mag1 = (z1 - z2)*xperp + (z1 - m00)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr + ncols);
+                        z2 = *(magptr + ncols + 1);
+
+                        mag2 = (z1 - z2)*xperp + (z1 - m00)*yperp;
+                    }
+                }
+                else
+                {
+                    if (gx >= -gy)
+                    {
+                        /* 101 */
+                        /* Left point */
+                        z1 = *(magptr - 1);
+                        z2 = *(magptr + ncols - 1);
+
+                        mag1 = (m00 - z1)*xperp + (z1 - z2)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr + 1);
+                        z2 = *(magptr - ncols + 1);
+
+                        mag2 = (m00 - z1)*xperp + (z1 - z2)*yperp;
+                    }
+                    else
+                    {
+                        /* 100 */
+                        /* Left point */
+                        z1 = *(magptr + ncols);
+                        z2 = *(magptr + ncols - 1);
+
+                        mag1 = (z1 - z2)*xperp + (m00 - z1)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr - ncols);
+                        z2 = *(magptr - ncols + 1);
+
+                        mag2 = (z1 - z2)*xperp  + (m00 - z1)*yperp;
+                    }
+                }
+            }
+            else
+            {
+                if ((gy = *gyptr) >= 0)
+                {
+                    if (-gx >= gy)
+                    {
+                        /* 011 */
+                        /* Left point */
+                        z1 = *(magptr + 1);
+                        z2 = *(magptr - ncols + 1);
+
+                        mag1 = (z1 - m00)*xperp + (z2 - z1)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr - 1);
+                        z2 = *(magptr + ncols - 1);
+
+                        mag2 = (z1 - m00)*xperp + (z2 - z1)*yperp;
+                    }
+                    else
+                    {
+                        /* 010 */
+                        /* Left point */
+                        z1 = *(magptr - ncols);
+                        z2 = *(magptr - ncols + 1);
+
+                        mag1 = (z2 - z1)*xperp + (z1 - m00)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr + ncols);
+                        z2 = *(magptr + ncols - 1);
+
+                        mag2 = (z2 - z1)*xperp + (z1 - m00)*yperp;
+                    }
+                }
+                else
+                {
+                    if (-gx > -gy)
+                    {
+                        /* 001 */
+                        /* Left point */
+                        z1 = *(magptr + 1);
+                        z2 = *(magptr + ncols + 1);
+
+                        mag1 = (z1 - m00)*xperp + (z1 - z2)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr - 1);
+                        z2 = *(magptr - ncols - 1);
+
+                        mag2 = (z1 - m00)*xperp + (z1 - z2)*yperp;
+                    }
+                    else
+                    {
+                        /* 000 */
+                        /* Left point */
+                        z1 = *(magptr + ncols);
+                        z2 = *(magptr + ncols + 1);
+
+                        mag1 = (z2 - z1)*xperp + (m00 - z1)*yperp;
+
+                        /* Right point */
+                        z1 = *(magptr - ncols);
+                        z2 = *(magptr - ncols - 1);
+
+                        mag2 = (z2 - z1)*xperp + (m00 - z1)*yperp;
+                    }
+                }
             }
 
-            float q_val = mag[y * width + x];
-            float neighbor_1 = 0.0f;
-            float neighbor_2 = 0.0f;
+            /* Now determine if the current point is a maximum point */
 
-            // Quantize to 0, 45, 90, 135 degrees
-            if ((angle >= 0.0f && angle < 22.5f) || (angle >= 157.5f && angle <= 180.0f)) {
-                // 0 degrees: East and West
-                neighbor_1 = mag[y * width + (x + 1)];
-                neighbor_2 = mag[y * width + (x - 1)];
-            } else if (angle >= 22.5f && angle < 67.5f) {
-                // 45 degrees: North-East and South-West
-                neighbor_1 = mag[(y - 1) * width + (x + 1)];
-                neighbor_2 = mag[(y + 1) * width + (x - 1)];
-            } else if (angle >= 67.5f && angle < 112.5f) {
-                // 90 degrees: North and South
-                neighbor_1 = mag[(y - 1) * width + x];
-                neighbor_2 = mag[(y + 1) * width + x];
-            } else if (angle >= 112.5f && angle < 157.5f) {
-                // 135 degrees: North-West and South-East
-                neighbor_1 = mag[(y - 1) * width + (x - 1)];
-                neighbor_2 = mag[(y + 1) * width + (x + 1)];
+            if ((mag1 > 0.0) || (mag2 > 0.0))
+            {
+                *resultptr = (unsigned char) NOEDGE;
             }
-
-            // Suppress non-maximums
-            if (q_val >= neighbor_1 && q_val >= neighbor_2) {
-                output_nms[y * width + x] = q_val;
-            } else {
-                output_nms[y * width + x] = 0.0f;
+            else
+            {
+                if (mag2 == 0.0)
+                    *resultptr = (unsigned char) NOEDGE;
+                else
+                    *resultptr = (unsigned char) POSSIBLE_EDGE;
             }
         }
     }
+    fin_non_max = clock();
+    double secs_non_max = (double)(fin_non_max - ini_non_max) / CLOCKS_PER_SEC;
+    printf("Tiempo bloque serial: \t\t\t%.5g	segundos\n", secs_non_max);
 
-    return output_nms;
+    clock_t fin_non_max_supp = clock();
+    double secs_non_max_supp = (double)(fin_non_max_supp - ini_non_max_supp) / CLOCKS_PER_SEC;
+    printf("Tiempo total funcion: \t\t\t%.5g	segundos\n", secs_non_max_supp );
+    printf("========================================================\n");
 }
