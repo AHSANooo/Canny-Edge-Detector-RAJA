@@ -42,7 +42,6 @@ output_*.jpg
 
 # OS & IDE Files
 .DS_Store
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -53,3 +52,7 @@ output_*.jpg
 third_party/**/build/
 third_party/**/*.o
 third_party/**/*.a
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
+branch_structure.json
