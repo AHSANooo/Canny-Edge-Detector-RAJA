@@ -1,0 +1,55 @@
+# Build directories
+build/
+build-*/
+bin/
+out/
+
+# CMake & Make files
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+*.ninja
+.ninja_deps
+.ninja_log
+
+# Executables & Binaries
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+canny_raja_baseline
+
+# Output Images
+output_*.png
+output_*.jpg
+*.out.png
+*.out.jpg
+
+# Ignore all pictures in root or other folders, but keep data/ input images
+*.png
+*.jpg
+*.jpeg
+!data/
+!data/**/*.png
+!data/**/*.jpg
+!data/**/*.jpeg
+
+# OS & IDE Files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+
+# Third Party specific ignores (avoiding in-tree artifacts if any)
+third_party/**/build/
+third_party/**/*.o
+third_party/**/*.a
