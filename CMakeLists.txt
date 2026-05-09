@@ -23,9 +23,9 @@ blt_add_executable(
     NAME canny_raja_baseline
     SOURCES 
         src/main.cpp
-        src/grayscale.cpp
+        src/pgm_io.cpp
         src/gaussian.cpp
-        src/sobel.cpp
+        src/derivative.cpp
         src/nms.cpp
         src/hysteresis.cpp
     INCLUDES include/
