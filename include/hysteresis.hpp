@@ -1,8 +1,9 @@
 #ifndef HYSTERESIS_HPP
 #define HYSTERESIS_HPP
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
-#include <vector>
-
-std::vector<unsigned char> applyHysteresis(const std::vector<float>& input_nms, int width, int height, float high_thresh, float low_thresh);
-
+void follow_edges(unsigned char *edgemapptr, short *edgemagptr, short lowval, int cols);
+void apply_hysteresis(short int *mag, unsigned char *nms, int rows, int cols, float tlow, float thigh, unsigned char *edge);
 #endif

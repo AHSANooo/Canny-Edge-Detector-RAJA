@@ -1,83 +1,197 @@
-#include <iostream>
-#include <vector>
-#include <string>
-
-// Assume stb libraries are correctly handled through CMake or located via include path
-#define STB_IMAGE_IMPLEMENTATION
-#include "../third_party/stb/stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "../third_party/stb/stb_image_write.h"
-
-#include "grayscale.hpp"
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <time.h>
+#include "pgm_io.hpp"
 #include "gaussian.hpp"
-#include "sobel.hpp"
+#include "derivative.hpp"
 #include "nms.hpp"
 #include "hysteresis.hpp"
 
-// Postponing actual RAJA/Umpire/CHAI operations to subsequent phases 
-// #include "RAJA/RAJA.hpp"
-// #include "umpire/Umpire.hpp"
-// #include "chai/ManagedArray.hpp"
+#define VERBOSE 0
 
-int main(int argc, char** argv) {
-    std::cout << "Starting Canny Edge Detector (Sequential Baseline)" << std::endl;
+void canny(unsigned char *image, int rows, int cols, float sigma, float tlow, float thigh, unsigned char **edge, char *fname);
 
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_image_path> <output_image_path>" << std::endl;
-        return EXIT_FAILURE;
-    }
 
-    std::string input_path = argv[1];
-    std::string output_path = argv[2];
+int main(int argc, char *argv[])
+{
+    printf("\n********************************************************\n");
+    printf("********************* CANNY SERIAL *********************\n");
+    printf("********************************************************\n");
+   char *infilename = NULL;  /* Name of the input image */
+   char *dirfilename = NULL; /* Name of the output gradient direction image */
+   char outfilename[128];    /* Name of the output "edge" image */
+   char composedfname[128];  /* Name of the output "direction" image */
+   unsigned char *image;     /* The input image */
+   unsigned char *edge;      /* The output edge image */
+   int rows, cols;           /* The dimensions of the image. */
+   float sigma,              /* Standard deviation of the gaussian kernel. */
+	 tlow,               /* Fraction of the high threshold in hysteresis. */
+	 thigh;              /* High hysteresis threshold control. The actual
+			        threshold is the (100 * thigh) percentage point
+			        in the histogram of the magnitude of the
+			        gradient image that passes non-maximal
+			        suppression. */
 
-    int width, height, channels;
-    // Load image forcing 3 channels (RGB)
-    unsigned char* img_data = stbi_load(input_path.c_str(), &width, &height, &channels, 3);
-    
-    if (!img_data) {
-        std::cerr << "Error: Could not load image from " << input_path << std::endl;
-        return EXIT_FAILURE;
-    }
+   clock_t ini = clock();
+   /****************************************************************************
+   * Get the command line arguments.
+   ****************************************************************************/
+   if(argc < 5){
+   fprintf(stderr,"\n<USAGE> %s image sigma tlow thigh [writedirim]\n",argv[0]);
+      fprintf(stderr,"\n      image:      An image to process. Must be in ");
+      fprintf(stderr,"PGM format.\n");
+      fprintf(stderr,"      sigma:      Standard deviation of the gaussian");
+      fprintf(stderr," blur kernel.\n");
+      fprintf(stderr,"      tlow:       Fraction (0.0-1.0) of the high ");
+      fprintf(stderr,"edge strength threshold.\n");
+      fprintf(stderr,"      thigh:      Fraction (0.0-1.0) of the distribution");
+      fprintf(stderr," of non-zero edge\n                  strengths for ");
+      fprintf(stderr,"hysteresis. The fraction is used to compute\n");
+      fprintf(stderr,"                  the high edge strength threshold.\n");
+      fprintf(stderr,"      writedirim: Optional argument to output ");
+      fprintf(stderr,"a floating point");
+      fprintf(stderr," direction image.\n\n");
+      exit(1);
+   }
 
-    std::cout << "Successfully loaded image: " << width << "x" << height << " pixels." << std::endl;
-    int num_pixels = width * height;
+   infilename = argv[1];
+   sigma = atof(argv[2]);
+   tlow = atof(argv[3]);
+   thigh = atof(argv[4]);
 
-    // Allocate flat 1D vector and copy data for processing (cache spatial locality)
-    std::vector<unsigned char> input_rgb(img_data, img_data + (num_pixels * 3));
-    
-    // Clean up stb load buffer immediately after copy
-    stbi_image_free(img_data);
+   if(argc == 6) dirfilename = infilename;
+   else dirfilename = NULL;
 
-    // 1. Grayscale Conversion (Mathematically pure float map)
-    std::vector<float> gray_float = convertToGrayscale(input_rgb, width, height);
-    
-    // 2. Gaussian Blur (Separable 1D convolution)
-    // Sigma of 1.4 is generally standard for baseline testing
-    std::vector<float> blurred_float = applyGaussianBlur(gray_float, width, height, 1.4f);
+   /****************************************************************************
+   * Read in the image. This read function allocates memory for the image.
+   ****************************************************************************/
+   if(VERBOSE) printf("Reading the image %s.\n", infilename);
+   if(read_pgm_image(infilename, &image, &rows, &cols) == 0){
+      fprintf(stderr, "Error reading the input image, %s.\n", infilename);
+      exit(1);
+   }
 
-    // 3. Sobel Operator (Gradient Magnitude and Direction)
-    auto sobel_result = applySobel(blurred_float, width, height);
-    std::vector<float>& mag = sobel_result.first;
-    std::vector<float>& dir = sobel_result.second;
+   /****************************************************************************
+   * Perform the edge detection. All of the work takes place here.
+   ****************************************************************************/
+   if(VERBOSE) printf("Starting Canny edge detection.\n");
+   if(dirfilename != NULL){
+      sprintf(composedfname, "%s_s_%3.2f_l_%3.2f_h_%3.2f.fim", infilename,
+      sigma, tlow, thigh);
+      dirfilename = composedfname;
+   }
+   canny(image, rows, cols, sigma, tlow, thigh, &edge, dirfilename);
 
-    // 4. Non-Maximum Suppression (Edge Thinning)
-    std::vector<float> nms = applyNonMaximumSuppression(mag, dir, width, height);
-
-    // 5. Edge Tracking by Hysteresis (Final Binary Map)
-    // Low: 30.0f, High: 90.0f
-    std::vector<unsigned char> final_edges = applyHysteresis(nms, width, height, 90.0f, 30.0f);
-
-    // Save final edge map output using stbi_write
-    int stride_in_bytes = width * 1; // 1 channel
-    int write_success = stbi_write_png(output_path.c_str(), width, height, 1, final_edges.data(), stride_in_bytes);
-
-    if (!write_success) {
-        std::cerr << "Error: Could not write edge map to " << output_path << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    std::cout << "Successfully wrote final Edge Map to " << output_path << std::endl;
-    std::cout << "CED Baseline Phase 1 (Sequential) completely functional and mapped!" << std::endl;
-
-    return EXIT_SUCCESS;
+   /****************************************************************************
+   * Write out the edge image to a file.
+   ****************************************************************************/
+   sprintf(outfilename, "imagen_serial.pgm");
+   // sprintf(outfilename, "%s_s_%3.2f_l_%3.2f_h_%3.2f.pgm", infilename,
+   //    sigma, tlow, thigh);
+   if(VERBOSE) printf("Writing the edge iname in the file %s.\n", outfilename);
+   if(write_pgm_image(outfilename, edge, rows, cols, "", 255) == 0){
+      fprintf(stderr, "Error writing the edge image, %s.\n", outfilename);
+      exit(1);
+   }
+   free(image);
+   clock_t fin = clock();
+   double secs = (double)(fin - ini) / CLOCKS_PER_SEC;
+   printf("\nTiempo total del programa: %.5g segundos\n\n", secs);
+   return 0;
 }
+
+/*******************************************************************************
+* PROCEDURE: canny
+* PURPOSE: To perform canny edge detection.
+* NAME: Mike Heath
+* DATE: 2/15/96
+*******************************************************************************/
+void canny(unsigned char *image, int rows, int cols, float sigma,
+         float tlow, float thigh, unsigned char **edge, char *fname)
+{
+   FILE *fpdir=NULL;          /* File to write the gradient image to.     */
+   unsigned char *nms;        /* Points that are local maximal magnitude. */
+   short int *smoothedim,     /* The image after gaussian smoothing.      */
+             *delta_x,        /* The first devivative image, x-direction. */
+             *delta_y,        /* The first derivative image, y-direction. */
+             *magnitude;      /* The magnitude of the gadient image.      */
+   int r, c, pos;
+   float *dir_radians=NULL;   /* Gradient direction image.                */
+
+   /****************************************************************************
+   * Perform gaussian smoothing on the image using the input standard
+   * deviation.
+   ****************************************************************************/
+   if(VERBOSE) printf("Smoothing the image using a gaussian kernel.\n");
+   gaussian_smooth(image, rows, cols, sigma, &smoothedim);
+
+   /****************************************************************************
+   * Compute the first derivative in the x and y directions.
+   ****************************************************************************/
+   if(VERBOSE) printf("Computing the X and Y first derivatives.\n");
+   derrivative_x_y(smoothedim, rows, cols, &delta_x, &delta_y);
+
+   /****************************************************************************
+   * This option to write out the direction of the edge gradient was added
+   * to make the information available for computing an edge quality figure
+   * of merit.
+   ****************************************************************************/
+   if(fname != NULL){
+      /*************************************************************************
+      * Compute the direction up the gradient, in radians that are
+      * specified counteclockwise from the positive x-axis.
+      *************************************************************************/
+      radian_direction(delta_x, delta_y, rows, cols, &dir_radians, -1, -1);
+
+      /*************************************************************************
+      * Write the gradient direction image out to a file.
+      *************************************************************************/
+      if((fpdir = fopen(fname, "wb")) == NULL){
+         fprintf(stderr, "Error opening the file %s for writing.\n", fname);
+         exit(1);
+      }
+      fwrite(dir_radians, sizeof(float), rows*cols, fpdir);
+      fclose(fpdir);
+      free(dir_radians);
+   }
+
+   /****************************************************************************
+   * Compute the magnitude of the gradient.
+   ****************************************************************************/
+   if(VERBOSE) printf("Computing the magnitude of the gradient.\n");
+   magnitude_x_y(delta_x, delta_y, rows, cols, &magnitude);
+
+   /****************************************************************************
+   * Perform non-maximal suppression.
+   ****************************************************************************/
+   if(VERBOSE) printf("Doing the non-maximal suppression.\n");
+   if((nms = (unsigned char *) calloc(rows*cols,sizeof(unsigned char)))==NULL){
+      fprintf(stderr, "Error allocating the nms image.\n");
+      exit(1);
+   }
+
+   non_max_supp(magnitude, delta_x, delta_y, rows, cols, nms);
+
+   /****************************************************************************
+   * Use hysteresis to mark the edge pixels.
+   ****************************************************************************/
+   if(VERBOSE) printf("Doing hysteresis thresholding.\n");
+   if((*edge=(unsigned char *)calloc(rows*cols,sizeof(unsigned char))) ==NULL){
+      fprintf(stderr, "Error allocating the edge image.\n");
+      exit(1);
+   }
+
+   apply_hysteresis(magnitude, nms, rows, cols, tlow, thigh, *edge);
+
+   /****************************************************************************
+   * Free all of the memory that we allocated except for the edge image that
+   * is still being used to store out result.
+   ****************************************************************************/
+   free(smoothedim);
+   free(delta_x);
+   free(delta_y);
+   free(magnitude);
+   free(nms);
+}
+
