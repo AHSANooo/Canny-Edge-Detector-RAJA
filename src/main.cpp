@@ -51,33 +51,33 @@ int main(int argc, char** argv) {
     // 1. Grayscale Conversion (Mathematically pure float map)
     std::vector<float> gray_float = convertToGrayscale(input_rgb, width, height);
     
-    // -- Stages 2-5 placeholdered for upcoming commits --
-    // std::vector<float> blurred(num_pixels);
-    // applyGaussianBlur(gray, blurred, width, height);    
-    // std::vector<float> mag(num_pixels), dir(num_pixels);
-    // applySobel(blurred, mag, dir, width, height);    
-    // std::vector<float> nms(num_pixels);
-    // applyNonMaximumSuppression(mag, dir, nms, width, height);    
-    // std::vector<unsigned char> edges(num_pixels);
-    // applyHysteresis(nms, edges, width, height, 50.0f, 20.0f);
+    // 2. Gaussian Blur (Separable 1D convolution)
+    // Sigma of 1.4 is generally standard for baseline testing
+    std::vector<float> blurred_float = applyGaussianBlur(gray_float, width, height, 1.4f);
 
-    // For Initial Visual Testing: Cast float vector back to uint8 to save Grayscale
-    std::vector<unsigned char> output_gray_img(num_pixels);
-    for (int i = 0; i < num_pixels; ++i) {
-        output_gray_img[i] = static_cast<unsigned char>(gray_float[i]);
-    }
+    // 3. Sobel Operator (Gradient Magnitude and Direction)
+    auto sobel_result = applySobel(blurred_float, width, height);
+    std::vector<float>& mag = sobel_result.first;
+    std::vector<float>& dir = sobel_result.second;
 
-    // Save outputs using stbi_write
+    // 4. Non-Maximum Suppression (Edge Thinning)
+    std::vector<float> nms = applyNonMaximumSuppression(mag, dir, width, height);
+
+    // 5. Edge Tracking by Hysteresis (Final Binary Map)
+    // Low: 30.0f, High: 90.0f
+    std::vector<unsigned char> final_edges = applyHysteresis(nms, width, height, 90.0f, 30.0f);
+
+    // Save final edge map output using stbi_write
     int stride_in_bytes = width * 1; // 1 channel
-    int write_success = stbi_write_png(output_path.c_str(), width, height, 1, output_gray_img.data(), stride_in_bytes);
+    int write_success = stbi_write_png(output_path.c_str(), width, height, 1, final_edges.data(), stride_in_bytes);
 
     if (!write_success) {
-        std::cerr << "Error: Could not write image to " << output_path << std::endl;
+        std::cerr << "Error: Could not write edge map to " << output_path << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::cout << "Successfully wrote grayscale processing result to " << output_path << std::endl;
-    std::cout << "CED Baseline processing complete!" << std::endl;
+    std::cout << "Successfully wrote final Edge Map to " << output_path << std::endl;
+    std::cout << "CED Baseline Phase 1 (Sequential) completely functional and mapped!" << std::endl;
 
     return EXIT_SUCCESS;
 }

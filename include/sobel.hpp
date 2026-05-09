@@ -2,7 +2,8 @@
 #define SOBEL_HPP
 
 #include <vector>
+#include <utility>
 
-void applySobel(const std::vector<float>& input_blurred, std::vector<float>& output_mag, std::vector<float>& output_dir, int width, int height);
+std::pair<std::vector<float>, std::vector<float>> applySobel(const std::vector<float>& input_blurred, int width, int height);
 
 #endif

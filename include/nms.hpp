@@ -3,6 +3,6 @@
 
 #include <vector>
 
-void applyNonMaximumSuppression(const std::vector<float>& mag, const std::vector<float>& dir, std::vector<float>& output_nms, int width, int height);
+std::vector<float> applyNonMaximumSuppression(const std::vector<float>& mag, const std::vector<float>& dir, int width, int height);
 
 #endif
