@@ -3,6 +3,6 @@
 
 #include <vector>
 
-void convertToGrayscale(const std::vector<unsigned char>& input_rgb, std::vector<unsigned char>& output_gray, int width, int height);
+std::vector<float> convertToGrayscale(const std::vector<unsigned char>& input_rgb, int width, int height);
 
 #endif
